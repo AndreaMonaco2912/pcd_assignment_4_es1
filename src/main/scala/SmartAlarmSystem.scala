@@ -1,4 +1,4 @@
-package assignment3
+package assignment4
 
 import SmartAlarmSystem.{Command, correctPin}
 

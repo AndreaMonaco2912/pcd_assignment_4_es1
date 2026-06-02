@@ -14,5 +14,5 @@ ThisBuild / libraryDependencies ++= Seq(
 lazy val root = (project in file("."))
   .settings(
     name := "SmartHomeAlarm",
-    idePackagePrefix := Some("assignment3")
+    idePackagePrefix := Some("assignment4")
   )

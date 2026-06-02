@@ -1,4 +1,4 @@
-package assignment3
+package assignment4
 
 import org.apache.pekko.actor.testkit.typed.scaladsl.{LoggingTestKit, ScalaTestWithActorTestKit}
 import org.scalatest.wordspec.AnyWordSpecLike
