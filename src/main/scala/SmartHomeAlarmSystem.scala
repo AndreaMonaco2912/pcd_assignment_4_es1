@@ -1,42 +1,57 @@
 package assignment4
 
-import SmartAlarmSystem.{Command, correctPin}
+import Command.ExitTimer
 
-import SmartAlarmSystem.Command.{ArmingPin, EnterPin, SensorDetection}
+import com.typesafe.config.ConfigFactory
 import org.apache.pekko.actor.typed.*
+import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.*
 
 import scala.concurrent.duration.DurationInt
 
-@main
-def main(): Unit =
-  val wrongPin = "2222"
-  val system = ActorSystem(SmartAlarmSystem(), "SmartAlarmSystem")
+enum Command extends CborSerializable:
+  case EnterPin(pin: String)
+  case ArmingPin(pin: String, zones: Set[String])
+  case SensorDetection(zone: String)
+  case ExitTimer
+  case EnterTimer
+  case AcuResolved(listing: Receptionist.Listing)
 
-  system ! ArmingPin(correctPin, Set("Kitchen"))
-  Thread.sleep(2000)
-  //No armed zone
-  system ! SensorDetection("Bedroom")
-  //Armed zone
-  system ! SensorDetection("Kitchen")
-  system ! EnterPin(correctPin)
-  Thread.sleep(2000)
+enum SensorType:
+  case Door
+  case Window
 
-  // Now arm all house
-  system ! EnterPin(correctPin)
-  Thread.sleep(2000)
-  system ! SensorDetection("Kitchen")
-  Thread.sleep(5000)
-  system ! EnterPin(wrongPin)
-  system ! EnterPin(correctPin)
+object Sensor:
 
-object SmartAlarmSystem:
-  enum Command:
-    case EnterPin(pin: String)
-    case ArmingPin(pin: String, zones: Set[String])
-    case SensorDetection(zone: String)
-    case ExitTimer
-    case EnterTimer
+  import Command.{AcuResolved, SensorDetection}
+
+  def apply(zone: String): Behavior[Command] = Behaviors.setup: ctx =>
+    val alarmControlUnitServiceKey = SmartAlarmControlUnit.getServiceKeyForZone(zone)
+    val listingAdapter = ctx.messageAdapter[Receptionist.Listing](AcuResolved.apply)
+    ctx.system.receptionist ! Receptionist.Subscribe(alarmControlUnitServiceKey, listingAdapter)
+    resolve(ctx, zone)
+
+  private def resolve(ctx: ActorContext[Command], zone: String): Behavior[Command] =
+    Behaviors.receiveMessagePartial:
+      case AcuResolved(listing) =>
+        listing.serviceInstances(SmartAlarmControlUnit.getServiceKeyForZone(zone)).headOption match
+          case Some(acu) => detection(ctx, acu, zone)
+          case None => Behaviors.same
+
+  private def detection(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String): Behavior[Command] =
+    Behaviors.withTimers: timers =>
+      val exitDuration = scala.util.Random.nextInt(20).seconds
+      timers.startSingleTimer(ExitTimer, exitDuration)
+      exitTimer(ctx, acu, zone)
+
+  private def exitTimer(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String): Behavior[Command] = Behaviors.receiveMessagePartial:
+    case Command.ExitTimer =>
+      ctx.log.info(s"Sending detection for zone $zone to ACU $acu")
+      acu ! SensorDetection(zone)
+      detection(ctx, acu, zone)
+
+
+object SmartAlarmControlUnit:
 
   export Command.*
 
@@ -47,8 +62,17 @@ object SmartAlarmSystem:
   private val allZones = Set("Hall", "Kitchen", "BedRoom")
   private var armedZones = Set.empty[String]
 
-  def apply(): Behavior[Command] = Behaviors.setup: ctx =>
-    disarmed(ctx)
+  def apply(zones: Set[String]): Behavior[Command] =
+    Behaviors.setup: ctx =>
+      zones.foreach: zone =>
+        ctx.system.receptionist ! Receptionist.Register(
+          SmartAlarmControlUnit.getServiceKeyForZone(zone),
+          ctx.self
+        )
+      disarmed(ctx)
+
+  def getServiceKeyForZone(zone: String): ServiceKey[Command] =
+    ServiceKey(s"alarm-control-unit-zone-$zone")
 
   private def disarmed(ctx: ActorContext[Command]): Behavior[Command] = Behaviors.receiveMessagePartial:
     case Command.EnterPin(pin) if pin == correctPin =>
@@ -123,3 +147,13 @@ object SmartAlarmSystem:
       Behaviors.same
     case _ =>
       Behaviors.same
+
+@main def spawnAlarmControlUnit(): Unit =
+  val config = ConfigFactory.load("application.conf")
+  val zones: Set[String] = sys.env("ZONES").split(",").toSet
+  val _ = ActorSystem[Command](SmartAlarmControlUnit(zones), "ClusterSystem", config)
+
+@main def spawnSensor(): Unit =
+  val config = ConfigFactory.load("application.conf")
+  val zone: String = sys.env("ZONE")
+  val _ = ActorSystem[Command](Sensor(zone), "ClusterSystem", config)

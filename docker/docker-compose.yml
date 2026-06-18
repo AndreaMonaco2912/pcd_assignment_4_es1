@@ -1,0 +1,32 @@
+services:
+  seed:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.simple
+    ports:
+      - "1600:1600"
+    environment:
+      - CLUSTER_IP=seed
+      - CLUSTER_PORT=1600
+      - SEED_PORT_1600_TCP_ADDR=seed
+
+  acu1:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.acu
+    environment:
+      - ZONES="kitchen,garage"
+
+  sensor1:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.sensor
+    environment:
+      - ZONE=kitchen
+
+  sensor2:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.sensor
+    environment:
+      - ZONE=garage
