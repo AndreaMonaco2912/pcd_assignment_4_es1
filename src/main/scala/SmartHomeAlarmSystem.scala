@@ -9,13 +9,15 @@ import org.apache.pekko.actor.typed.scaladsl.*
 
 import scala.concurrent.duration.DurationInt
 
-enum Command extends CborSerializable:
-  case EnterPin(pin: String)
-  case ArmingPin(pin: String, zones: Set[String])
-  case SensorDetection(zone: String)
-  case ExitTimer
-  case EnterTimer
-  case AcuResolved(listing: Receptionist.Listing)
+sealed trait Command extends CborSerializable
+
+object Command:
+  final case class EnterPin(pin: String) extends Command
+  final case class ArmingPin(pin: String, zones: Set[String]) extends Command
+  final case class SensorDetection(zone: String) extends Command
+  case object ExitTimer extends Command
+  case object EnterTimer extends Command
+  final case class AcuResolved(listing: Receptionist.Listing) extends Command
 
 enum SensorType:
   case Door
@@ -29,18 +31,24 @@ object Sensor:
     val alarmControlUnitServiceKey = SmartAlarmControlUnit.getServiceKeyForZone(zone)
     val listingAdapter = ctx.messageAdapter[Receptionist.Listing](AcuResolved.apply)
     ctx.system.receptionist ! Receptionist.Subscribe(alarmControlUnitServiceKey, listingAdapter)
+    ctx.log.info("Starting to resolve ACU")
     resolve(ctx, zone)
 
   private def resolve(ctx: ActorContext[Command], zone: String): Behavior[Command] =
     Behaviors.receiveMessagePartial:
       case AcuResolved(listing) =>
         listing.serviceInstances(SmartAlarmControlUnit.getServiceKeyForZone(zone)).headOption match
-          case Some(acu) => detection(ctx, acu, zone)
-          case None => Behaviors.same
+          case Some(acu) =>
+            ctx.log.info(s"Detected ACU for zone $zone")
+            detection(ctx, acu, zone)
+          case None =>
+            ctx.log.info("Found nothing :skull:")
+            Behaviors.same
 
   private def detection(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String): Behavior[Command] =
     Behaviors.withTimers: timers =>
       val exitDuration = scala.util.Random.nextInt(20).seconds
+      ctx.log.info(s"Waiting $exitDuration")
       timers.startSingleTimer(ExitTimer, exitDuration)
       exitTimer(ctx, acu, zone)
 
@@ -65,10 +73,12 @@ object SmartAlarmControlUnit:
   def apply(zones: Set[String]): Behavior[Command] =
     Behaviors.setup: ctx =>
       zones.foreach: zone =>
+        ctx.log.info(s"Registering zone $zone")
         ctx.system.receptionist ! Receptionist.Register(
           SmartAlarmControlUnit.getServiceKeyForZone(zone),
           ctx.self
         )
+      ctx.log.info("Entering disarmed state")
       disarmed(ctx)
 
   def getServiceKeyForZone(zone: String): ServiceKey[Command] =

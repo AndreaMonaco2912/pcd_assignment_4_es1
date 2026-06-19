@@ -15,7 +15,11 @@ services:
       context: ../
       dockerfile: docker/Dockerfile.acu
     environment:
-      - ZONES="kitchen,garage"
+      - ZONES=kitchen,garage
+      - CLUSTER_IP=acu1
+      - CLUSTER_PORT=2552
+      - SEED_PORT_1600_TCP_ADDR=seed
+
 
   sensor1:
     build:
@@ -23,6 +27,10 @@ services:
       dockerfile: docker/Dockerfile.sensor
     environment:
       - ZONE=kitchen
+      - CLUSTER_IP=sensor1
+      - CLUSTER_PORT=2553
+      - SEED_PORT_1600_TCP_ADDR=seed
+
 
   sensor2:
     build:
@@ -30,3 +38,6 @@ services:
       dockerfile: docker/Dockerfile.sensor
     environment:
       - ZONE=garage
+      - CLUSTER_IP=sensor2
+      - CLUSTER_PORT=2554
+      - SEED_PORT_1600_TCP_ADDR=seed
