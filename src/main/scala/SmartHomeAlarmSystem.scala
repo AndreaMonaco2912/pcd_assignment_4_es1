@@ -8,6 +8,7 @@ import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.*
 
 import scala.concurrent.duration.DurationInt
+import scala.util.Random
 
 sealed trait Command extends CborSerializable
 
@@ -47,7 +48,7 @@ object Sensor:
 
   private def detection(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String): Behavior[Command] =
     Behaviors.withTimers: timers =>
-      val exitDuration = scala.util.Random.nextInt(20).seconds
+      val exitDuration = Random.nextInt(20).seconds
       ctx.log.info(s"Waiting $exitDuration")
       timers.startSingleTimer(ExitTimer, exitDuration)
       exitTimer(ctx, acu, zone)
@@ -59,6 +60,50 @@ object Sensor:
       detection(ctx, acu, zone)
 
 
+object KeyPad:
+
+  import Command.{AcuResolved, EnterPin}
+
+  private val wrongPin = "0000"
+  private val correctPin = "1234"
+
+  def apply(zone: String): Behavior[Command] = Behaviors.setup: ctx =>
+    val alarmControlUnitServiceKey = SmartAlarmControlUnit.getServiceKeyForZone(zone)
+    val listingAdapter = ctx.messageAdapter[Receptionist.Listing](AcuResolved.apply)
+    ctx.system.receptionist ! Receptionist.Subscribe(alarmControlUnitServiceKey, listingAdapter)
+    ctx.log.info("Starting to resolve ACU")
+    resolve(ctx, zone)
+
+  private def resolve(ctx: ActorContext[Command], zone: String): Behavior[Command] =
+    Behaviors.receiveMessagePartial:
+      case AcuResolved(listing) =>
+        listing.serviceInstances(SmartAlarmControlUnit.getServiceKeyForZone(zone)).headOption match
+          case Some(acu) =>
+            ctx.log.info(s"Detected ACU for zone $zone")
+            pressing(ctx, acu)
+          case None =>
+            ctx.log.info("Found nothing :skull:")
+            Behaviors.same
+
+  private def pressing(ctx: ActorContext[Command], acu: ActorRef[Command]): Behavior[Command] =
+    Behaviors.withTimers: timers =>
+      val delay = Random.nextInt(20).seconds
+      ctx.log.info(s"Waiting $delay before entering pin")
+      timers.startSingleTimer(ExitTimer, delay)
+      pressTimer(ctx, acu)
+
+  private def pressTimer(ctx: ActorContext[Command], acu: ActorRef[Command]): Behavior[Command] =
+    Behaviors.receiveMessagePartial:
+      case Command.ExitTimer =>
+        ctx.log.info(s"Entering wrong pin then correct pin on ACU $acu")
+        if Random.nextBoolean() then
+          ctx.log.info(s"Entering wrong pin on ACU $acu")
+          acu ! EnterPin(wrongPin)
+        else
+          ctx.log.info(s"Entering correct pin on ACU $acu")
+          acu ! EnterPin(correctPin)
+        pressing(ctx, acu)
+
 object SmartAlarmControlUnit:
 
   export Command.*
@@ -67,10 +112,11 @@ object SmartAlarmControlUnit:
   private val exitDuration = 1.seconds
   private val enterDuration = 3.seconds
 
-  private val allZones = Set("Hall", "Kitchen", "BedRoom")
+  private var allZones = Set.empty[String]
   private var armedZones = Set.empty[String]
 
   def apply(zones: Set[String]): Behavior[Command] =
+    allZones = zones
     Behaviors.setup: ctx =>
       zones.foreach: zone =>
         ctx.log.info(s"Registering zone $zone")
@@ -167,3 +213,8 @@ object SmartAlarmControlUnit:
   val config = ConfigFactory.load("application.conf")
   val zone: String = sys.env("ZONE")
   val _ = ActorSystem[Command](Sensor(zone), "ClusterSystem", config)
+
+@main def spawnKeyPad(): Unit =
+  val config = ConfigFactory.load("application.conf")
+  val zone: String = sys.env("ZONE")
+  val _ = ActorSystem[Command](KeyPad(zone), "ClusterSystem", config)
