@@ -36,6 +36,7 @@ services:
       dockerfile: docker/Dockerfile.sensor
     environment:
       - ZONE=Kitchen
+      - KIND=Motion
       - CLUSTER_IP=sensor1
       - CLUSTER_PORT=2553
       - SEED_PORT_1600_TCP_ADDR=seed
@@ -47,6 +48,7 @@ services:
       dockerfile: docker/Dockerfile.sensor
     environment:
       - ZONE=BedRoom
+      - KIND=Door
       - CLUSTER_IP=sensor2
       - CLUSTER_PORT=2554
       - SEED_PORT_1600_TCP_ADDR=seed
@@ -57,6 +59,7 @@ services:
       dockerfile: docker/Dockerfile.sensor
     environment:
       - ZONE=Garage
+      - KIND=Door
       - CLUSTER_IP=sensor3
       - CLUSTER_PORT=2556
       - SEED_PORT_1600_TCP_ADDR=seed

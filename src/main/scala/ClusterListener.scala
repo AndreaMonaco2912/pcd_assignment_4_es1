@@ -10,6 +10,7 @@ object ClusterListener:
   enum Event:
     case ReachabilityChange(event: ReachabilityEvent)
     case MemberChange(event: MemberEvent)
+
   export Event.*
 
   def apply(): Behavior[Event] = Behaviors.setup: ctx =>

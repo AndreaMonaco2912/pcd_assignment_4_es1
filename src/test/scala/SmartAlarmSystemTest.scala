@@ -5,12 +5,12 @@ import org.scalatest.wordspec.AnyWordSpecLike
 
 class SmartAlarmSystemTest extends ScalaTestWithActorTestKit with AnyWordSpecLike {
 
-  import SmartAlarmSystem.*
+  import SmartAlarmControlUnit.*
 
   "The SmartAlarmSystem" should {
 
     "reject an incorrect PIN when disarmed" in {
-      val alarm = spawn(SmartAlarmSystem())
+      val alarm = spawn(SmartAlarmControlUnit())
       val wrongPin = "2222"
       LoggingTestKit.info("D-Wrong pin.").expect {
         alarm ! EnterPin(wrongPin)
@@ -18,7 +18,7 @@ class SmartAlarmSystemTest extends ScalaTestWithActorTestKit with AnyWordSpecLik
     }
 
     "arm successfully and activate sensors after ExitTimer" in {
-      val alarm = spawn(SmartAlarmSystem())
+      val alarm = spawn(SmartAlarmControlUnit())
 
       LoggingTestKit.info("D-Correct pin, all zones are armed. You have: 1 second to leave your home.").expect {
         alarm ! EnterPin(correctPin)
@@ -32,7 +32,7 @@ class SmartAlarmSystemTest extends ScalaTestWithActorTestKit with AnyWordSpecLik
     }
 
     "ignore sensor detections during the exit delay phase" in {
-      val alarm = spawn(SmartAlarmSystem())
+      val alarm = spawn(SmartAlarmControlUnit())
       alarm ! EnterPin(correctPin)
 
       alarm ! SensorDetection("Hall")
@@ -43,7 +43,7 @@ class SmartAlarmSystemTest extends ScalaTestWithActorTestKit with AnyWordSpecLik
     }
 
     "allow disarming during the Entry Delay" in {
-      val alarm = spawn(SmartAlarmSystem())
+      val alarm = spawn(SmartAlarmControlUnit())
       alarm ! EnterPin(correctPin)
       alarm ! ExitTimer
 
@@ -55,7 +55,7 @@ class SmartAlarmSystemTest extends ScalaTestWithActorTestKit with AnyWordSpecLik
     }
 
     "sound the alarm if PIN is not entered before EnterTimer expires" in {
-      val alarm = spawn(SmartAlarmSystem())
+      val alarm = spawn(SmartAlarmControlUnit())
       val wrongPin = "2222"
 
       alarm ! EnterPin(correctPin)
@@ -73,7 +73,7 @@ class SmartAlarmSystemTest extends ScalaTestWithActorTestKit with AnyWordSpecLik
     }
 
     "support partial arming by ignoring inactive zones" in {
-      val alarm = spawn(SmartAlarmSystem())
+      val alarm = spawn(SmartAlarmControlUnit())
 
       // Arm only the "Hall"
       LoggingTestKit.info("D-Correct pin, armed zones are: Set(Hall).").expect {

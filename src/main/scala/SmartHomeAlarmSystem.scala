@@ -14,10 +14,15 @@ sealed trait Command extends CborSerializable
 
 object Command:
   final case class EnterPin(pin: String) extends Command
+
   final case class ArmingPin(pin: String, zones: Set[String]) extends Command
+
   final case class SensorDetection(zone: String) extends Command
+
   case object ExitTimer extends Command
+
   case object EnterTimer extends Command
+
   final case class AcuResolved(listing: Receptionist.Listing) extends Command
 
 enum SensorType:
@@ -28,36 +33,36 @@ object Sensor:
 
   import Command.{AcuResolved, SensorDetection}
 
-  def apply(zone: String): Behavior[Command] = Behaviors.setup: ctx =>
+  def apply(zone: String, kind: String): Behavior[Command] = Behaviors.setup: ctx =>
     val alarmControlUnitServiceKey = SmartAlarmControlUnit.getServiceKeyForZone(zone)
     val listingAdapter = ctx.messageAdapter[Receptionist.Listing](AcuResolved.apply)
     ctx.system.receptionist ! Receptionist.Subscribe(alarmControlUnitServiceKey, listingAdapter)
     ctx.log.info("Starting to resolve ACU")
-    resolve(ctx, zone)
+    resolve(ctx, zone, kind)
 
-  private def resolve(ctx: ActorContext[Command], zone: String): Behavior[Command] =
+  private def resolve(ctx: ActorContext[Command], zone: String, kind: String): Behavior[Command] =
     Behaviors.receiveMessagePartial:
       case AcuResolved(listing) =>
         listing.serviceInstances(SmartAlarmControlUnit.getServiceKeyForZone(zone)).headOption match
           case Some(acu) =>
             ctx.log.info(s"Detected ACU for zone $zone")
-            detection(ctx, acu, zone)
+            detection(ctx, acu, zone, kind)
           case None =>
-            ctx.log.info("Found nothing :skull:")
+            ctx.log.info("Found nothing")
             Behaviors.same
 
-  private def detection(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String): Behavior[Command] =
+  private def detection(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String, kind: String): Behavior[Command] =
     Behaviors.withTimers: timers =>
       val exitDuration = Random.nextInt(20).seconds
       ctx.log.info(s"Waiting $exitDuration")
       timers.startSingleTimer(ExitTimer, exitDuration)
-      exitTimer(ctx, acu, zone)
+      exitTimer(ctx, acu, zone, kind)
 
-  private def exitTimer(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String): Behavior[Command] = Behaviors.receiveMessagePartial:
+  private def exitTimer(ctx: ActorContext[Command], acu: ActorRef[Command], zone: String, kind: String): Behavior[Command] = Behaviors.receiveMessagePartial:
     case Command.ExitTimer =>
-      ctx.log.info(s"Sending detection for zone $zone to ACU $acu")
+      ctx.log.info(s"Sending detection for zone $zone of type $kind to ACU $acu")
       acu ! SensorDetection(zone)
-      detection(ctx, acu, zone)
+      detection(ctx, acu, zone, kind)
 
 
 object KeyPad:
@@ -212,7 +217,8 @@ object SmartAlarmControlUnit:
 @main def spawnSensor(): Unit =
   val config = ConfigFactory.load("application.conf")
   val zone: String = sys.env("ZONE")
-  val _ = ActorSystem[Command](Sensor(zone), "ClusterSystem", config)
+  val kind: String = sys.env("KIND")
+  val _ = ActorSystem[Command](Sensor(zone, kind), "ClusterSystem", config)
 
 @main def spawnKeyPad(): Unit =
   val config = ConfigFactory.load("application.conf")
