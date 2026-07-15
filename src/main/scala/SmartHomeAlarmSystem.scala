@@ -7,6 +7,7 @@ import org.apache.pekko.actor.typed.*
 import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.*
 
+import java.nio.file.{Files, Paths}
 import scala.concurrent.duration.DurationInt
 import scala.util.Random
 
@@ -87,7 +88,7 @@ object KeyPad:
             ctx.log.info(s"Detected ACU for zone $zone")
             pressing(ctx, acu)
           case None =>
-            ctx.log.info("Found nothing :skull:")
+            ctx.log.info("Found nothing")
             Behaviors.same
 
   private def pressing(ctx: ActorContext[Command], acu: ActorRef[Command]): Behavior[Command] =
@@ -100,7 +101,7 @@ object KeyPad:
   private def pressTimer(ctx: ActorContext[Command], acu: ActorRef[Command]): Behavior[Command] =
     Behaviors.receiveMessagePartial:
       case Command.ExitTimer =>
-        ctx.log.info(s"Entering wrong pin then correct pin on ACU $acu")
+        ctx.log.info(s"Entering randomly wrong pin or correct pin on ACU $acu")
         if Random.nextBoolean() then
           ctx.log.info(s"Entering wrong pin on ACU $acu")
           acu ! EnterPin(wrongPin)
@@ -129,11 +130,29 @@ object SmartAlarmControlUnit:
           SmartAlarmControlUnit.getServiceKeyForZone(zone),
           ctx.self
         )
-      ctx.log.info("Entering disarmed state")
-      disarmed(ctx)
+      val path = Paths.get(sys.env("CLUSTER_IP"))
+      ctx.log.info("Looking for file: " + path)
+
+      if (Files.notExists(path)) {
+        Files.createFile(path)
+        ctx.log.info("Just started.")
+        ctx.log.info("Entering disarmed state")
+        disarmed(ctx)
+      } else {
+        ctx.log.info("Failure detected. Entering recovery.")
+        recovery(ctx)
+      }
+
 
   def getServiceKeyForZone(zone: String): ServiceKey[Command] =
     ServiceKey(s"alarm-control-unit-zone-$zone")
+
+  private def recovery(ctx: ActorContext[Command]): Behavior[Command] = Behaviors.receiveMessagePartial:
+    case Command.EnterPin(pin) if pin == correctPin =>
+      ctx.log.info("R-Correct pin. Now returning to disarmed")
+      disarmed(ctx)
+    case _ =>
+      Behaviors.same
 
   private def disarmed(ctx: ActorContext[Command]): Behavior[Command] = Behaviors.receiveMessagePartial:
     case Command.EnterPin(pin) if pin == correctPin =>

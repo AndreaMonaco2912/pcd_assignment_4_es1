@@ -2,74 +2,86 @@ services:
   seed:
     build:
       context: ../
-      dockerfile: docker/Dockerfile.simple
+      dockerfile: docker-complicated/Dockerfile.simple
     ports:
       - "1600:1600"
     environment:
       - CLUSTER_IP=seed
       - CLUSTER_PORT=1600
       - SEED_PORT_1600_TCP_ADDR=seed
+    restart: on-failure
 
   acu1:
     build:
       context: ../
-      dockerfile: docker/Dockerfile.acu
+      dockerfile: docker-complicated/Dockerfile.acu
     environment:
       - ZONES=Kitchen,BedRoom
       - CLUSTER_IP=acu1
       - CLUSTER_PORT=2552
       - SEED_PORT_1600_TCP_ADDR=seed
+    restart: on-failure
+
 
   acu2:
     build:
       context: ../
-      dockerfile: docker/Dockerfile.acu
+      dockerfile: docker-complicated/Dockerfile.acu
     environment:
       - ZONES=Garage
       - CLUSTER_IP=acu2
       - CLUSTER_PORT=2555
       - SEED_PORT_1600_TCP_ADDR=seed
+    restart: on-failure
+
 
   sensor1:
     build:
       context: ../
-      dockerfile: docker/Dockerfile.sensor
+      dockerfile: docker-complicated/Dockerfile.sensor
     environment:
       - ZONE=Kitchen
       - KIND=Motion
       - CLUSTER_IP=sensor1
       - CLUSTER_PORT=2553
       - SEED_PORT_1600_TCP_ADDR=seed
+    restart: on-failure
+
 
 
   sensor2:
     build:
       context: ../
-      dockerfile: docker/Dockerfile.sensor
+      dockerfile: docker-complicated/Dockerfile.sensor
     environment:
       - ZONE=BedRoom
       - KIND=Door
       - CLUSTER_IP=sensor2
       - CLUSTER_PORT=2554
       - SEED_PORT_1600_TCP_ADDR=seed
+    restart: on-failure
+
 
   sensor3:
     build:
       context: ../
-      dockerfile: docker/Dockerfile.sensor
+      dockerfile: docker-complicated/Dockerfile.sensor
     environment:
       - ZONE=Garage
       - KIND=Door
       - CLUSTER_IP=sensor3
       - CLUSTER_PORT=2556
       - SEED_PORT_1600_TCP_ADDR=seed
+    restart: on-failure
+
 
   keypad1:
     build:
       context: ../
-      dockerfile: docker/Dockerfile.keypad
+      dockerfile: docker-complicated/Dockerfile.keypad
     environment:
       - ZONE=Kitchen
       - CLUSTER_IP=keypad1
       - CLUSTER_PORT=2557
       - SEED_PORT_1600_TCP_ADDR=seed
+    restart: on-failure
